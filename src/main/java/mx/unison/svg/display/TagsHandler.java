@@ -8,6 +8,7 @@ import org.xml.sax.helpers.DefaultHandler;
 
 import java.util.ArrayList;
 import java.util.Properties;
+import java.util.Set;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -16,7 +17,11 @@ public class TagsHandler  extends DefaultHandler {
 
     private ArrayList<Properties> shapes;
     private Properties currentShape = null;
-
+    
+    private static final Set<String> SUPPORTED_SHAPES = Set.of(
+        "line", "ellipse", "circle", "polyline", "rect", "text"
+    );
+    
     public TagsHandler() {
         super();
         shapes = new ArrayList<>();
@@ -60,25 +65,21 @@ public class TagsHandler  extends DefaultHandler {
         } else {
             tagName = localName.toLowerCase();
         }
-
-        if  (tagName.equals("line") ) {
-            LOG.info("Starting element " + tagName);
+        // valores admitidos: line, ellipse, circle, polyline, rect
+        // se añade un set para simplificar más el código
+        if (SUPPORTED_SHAPES.contains(tagName)) {
+            addShape(tagName, atts);
+        }
+    }
+    
+    // método de apoyo para startElement, en vez de tener que hacer ifs uno por uno
+    private void addShape(String tagName, Attributes atts) {
+        LOG.info("Starting element " + tagName);
             currentShape = new Properties();
-            currentShape.put("type", "line");
+            currentShape.put("type", tagName);
 
             copyAttributes(atts, currentShape);
             shapes.add(currentShape);
-        }
-
-        if  (tagName.equals("circle") ) {
-            LOG.info("Starting element " + tagName);
-            currentShape = new Properties();
-            currentShape.put("type", "circle");
-
-            copyAttributes(atts, currentShape);
-            shapes.add(currentShape);
-        }
-
     }
 
     private void copyAttributes(Attributes atts, Properties myShape) {
