@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg width="640" height="480" xmlns="http://www.w3.org/2000/svg">
+
+    <!-- Rectángulos: distintos tamaños y colores; el segundo con esquinas redondeadas -->
+    <rect x="20" y="20" width="200" height="100" fill="yellow" stroke="black" stroke-width="2"/>
+    <rect x="240" y="20" width="120" height="100" rx="20" ry="10"
+          fill="#f90" stroke="rgb(128,0,128)" stroke-width="4"/>
+
+    <!-- Elipses: radios diferentes, una sin contorno y otra sin relleno -->
+    <ellipse cx="480" cy="70" rx="100" ry="50" fill="lightblue" stroke="navy" stroke-width="3"/>
+    <ellipse cx="120" cy="210" rx="40" ry="70" fill="none" stroke="darkgreen" stroke-width="5"/>
+
+    <!-- Polilíneas: distinto número de vértices; abierta, y con relleno que cierra el contorno -->
+    <polyline points="200,250 250,150 300,250 350,150 400,250"
+              fill="none" stroke="blue" stroke-width="3"/>
+    <polyline points="430 250, 480 150, 530 250"
+              fill="#9c9" stroke="darkred" stroke-width="2"/>
+
+    <!-- Línea: comprueba que la funcionalidad original sigue operando -->
+    <line x1="20" y1="300" x2="620" y2="300" stroke="gray" stroke-width="2"/>
+
+    <!-- Texto: diferentes tamaños y colores -->
+    <text x="20" y="350" font-family="Arial" font-size="24" fill="black">
+        Programación gráfica con Java
+    </text>
+    <text x="20" y="400" font-family="serif" font-size="36" fill="crimson">SVG &amp; Java 2D</text>
+
+    <!-- Orden: el círculo debe quedar debajo del rectángulo que le sigue -->
+    <circle cx="520" cy="390" r="60" fill="orange"/>
+    <rect x="500" y="370" width="110" height="80" fill="teal"/>
+
+    <!-- Datos incorrectos: se ignoran o usan valores predeterminados, sin detener el dibujo -->
+    <rect x="10" y="10" width="-50" height="20" fill="red"/>
+    <ellipse cx="10" cy="10" rx="0" ry="20" fill="red"/>
+    <polyline points="10,10" stroke="red"/>
+    <circle cx="abc" cy="10" r="xyz" fill="red"/>
+
+    <!-- Un color desconocido en fill usa el negro predeterminado -->
+    <rect x="20" y="430" width="60" height="30" fill="noexiste"/>
+</svg>
