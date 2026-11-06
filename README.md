@@ -13,7 +13,7 @@ Para conocer más sobre el formato SVG, puedes visitar:
 - La documentación de Mozilla Developer Network (MDN): [SVG - MDN Web Docs](https://developer.mozilla.org/es/docs/Web/SVG).
 - La documentación de W3Schools: [SVG Tutorial](https://www.w3schools.com/graphics/svg_intro.asp).
 
-> **Alcance real:** el proyecto incluye tres programas orientados a SVG (`DescribeSVG`, `Geometric` y `DisplayDiagram`) y una clase `Main` de demostración inicial. El visualizador gráfico **solo implementa el dibujo de elementos `<line>`**; no renderiza SVG completo.
+> **Alcance real:** el proyecto incluye tres programas orientados a SVG (`DescribeSVG`, `Geometric` y `DisplayDiagram`) y una clase `Main` de demostración inicial. El visualizador gráfico **dibuja los elementos `<line>`, `<polyline>`, `<rect>`, `<circle>`, `<ellipse>` y `<text>`** en el orden del documento; no renderiza SVG completo.
 
 ## Contenido
 
@@ -22,10 +22,9 @@ Para conocer más sobre el formato SVG, puedes visitar:
 - [Compilación](#compilación)
 - [Programas y ejemplos de ejecución](#programas-y-ejemplos-de-ejecución)
 - [Documentación de las clases](#documentación-de-las-clases)
-- [Archivos SVG incluidos](#archivos-svg-incluidos)
+- [Diagrama de clases](#diagrama-de-clases)
+- [Flujo de procesamiento](#flujo-de-procesamiento)
 - [Limitaciones y observaciones técnicas](#limitaciones-y-observaciones-técnicas)
-- [Posibles mejoras](#posibles-mejoras)
-- [Referencias](#referencias)
 
 ## Tecnologías y requisitos
 
@@ -36,13 +35,14 @@ Para conocer más sobre el formato SVG, puedes visitar:
 - **Pruebas:** JUnit Jupiter, declarado como dependencia de prueba en `build.gradle` (BOM 5.10.0). No se incluyen archivos de pruebas en el ZIP examinado.
 - **Dependencias de producción:** no se declaran bibliotecas externas.
 
-Se necesita un **JDK compatible con Gradle 9.8.0** (por ejemplo, JDK 17 o posterior) y un entorno gráfico de escritorio para ejecutar el visualizador. El repositorio no fija una versión de Java mediante `toolchain` ni `sourceCompatibility`.
+Se necesita un **JDK 21 o posterior**, porque el código usa `List.getFirst()` y `Math.clamp(...)`, y un entorno gráfico de escritorio para ejecutar el visualizador. El repositorio no fija una versión de Java mediante `toolchain` ni `sourceCompatibility`.
 
 ## Estructura del proyecto
 
 ```text
 java_svg_files/
 ├── build.gradle
+├── colors.properties
 ├── settings.gradle
 ├── gradlew
 ├── gradlew.bat
@@ -53,19 +53,31 @@ java_svg_files/
 │       ├── data/
 │       │   ├── DescribeSVG.java
 │       │   ├── Geometric.java
-│       │   └── SVGDocumentHandler.java
+│       │   ├── SVGDocumentHandler.java
+│       │   └── ShapeFactory.java
 │       ├── display/
 │       │   ├── DisplayDiagram.java
 │       │   ├── SVGDiagram.java
 │       │   └── TagsHandler.java
 │       └── util/
 │           ├── Circle.java
+│           ├── ColorParser.java
+│           ├── Ellipse.java
 │           ├── Line.java
-│           └── Rect.java
+│           ├── Polyline.java
+│           ├── Rect.java
+│           ├── SVGShape.java
+│           ├── SVGStyle.java
+│           └── Text.java
 └── svg/
+    ├── dummy.svg
     ├── ejemplo.svg
+    ├── ellipse.svg
     ├── figuras.svg
-    └── simple.svg
+    ├── rectangulo.svg
+    ├── simple.svg
+    ├── test_shapes.svg
+    └── text.svg
 ```
 
 El ZIP también contiene `.git/`, `build/` y un archivo `.iml`: son metadatos de Git, resultados de compilación y configuración del IDE, respectivamente; no forman parte del código fuente necesario para comprender los ejemplos.
@@ -86,7 +98,7 @@ Desde el directorio raíz del proyecto:
 .\gradlew.bat classes
 ```
 
-La compilación coloca las clases en `build/classes/java/main`. Para ejecutar clases con `main`, puede utilizarse `java -cp` después de compilar; el proyecto **no aplica el plugin `application`**, por lo que no define una tarea `run` ni una clase principal predeterminada.
+La compilación coloca las clases en `build/classes/java/main` y copia `colors.properties` a `build/resources/main`. Para ejecutar clases con `main`, puede utilizarse `java -cp` después de compilar; el proyecto **no aplica el plugin `application`**, por lo que no define una tarea `run` ni una clase principal predeterminada.
 
 Los comandos siguientes se ejecutan **desde la raíz del proyecto**. En Windows, sustituya `:` por `;` en el separador de rutas del classpath.
 
@@ -111,6 +123,9 @@ Analiza etiquetas SVG y realiza cálculos para las figuras que reconoce:
 - `<line>`: longitud y pendiente.
 - `<circle>`: área y perímetro a partir de `r`.
 - `<rect>`: área y perímetro a partir de `width` y `height`.
+- `<ellipse>`: área y perímetro aproximado a partir de `rx` y `ry`.
+- `<polyline>`: número de vértices y longitud total.
+- `<text>`: posición, fuente y contenido.
 
 ```bash
 java -cp build/classes/java/main mx.unison.svg.data.Geometric svg/figuras.svg
@@ -118,19 +133,19 @@ java -cp build/classes/java/main mx.unison.svg.data.Geometric svg/figuras.svg
 
 **Entrada:** ruta SVG como primer argumento. **Salida:** cálculos geométricos impresos en consola. Se requiere al menos un argumento, pero el programa no rechaza argumentos adicionales.
 
-**Advertencia:** la clase `Line` recibe parámetros en el orden `(x1, x2, y1, y2)`, mientras que `Geometric` le pasa `(x1, y1, x2, y2)`. Esto puede producir longitudes y pendientes incorrectas; consulte [Limitaciones](#limitaciones-y-observaciones-técnicas). Asimismo, la fábrica SAX activa validación sin aportar esquema o DTD explícitos, por lo que pueden aparecer diagnósticos de validación al procesar los SVG de ejemplo.
+**Advertencia:** la fábrica SAX activa validación sin aportar esquema o DTD explícitos, por lo que pueden aparecer diagnósticos de validación al procesar los SVG de ejemplo.
 
 ### 3. Visualización gráfica — `DisplayDiagram`
 
-Abre una ventana Swing titulada **Dibujo** y añade un componente `SVGDiagram` que lee el archivo SVG y dibuja **líneas** con `Graphics2D`.
+Abre una ventana Swing titulada **SVG Diagram Viewer** y añade un componente `SVGDiagram` que lee el archivo SVG y dibuja sus figuras con `Graphics2D`.
 
 ```bash
-java -cp build/classes/java/main mx.unison.svg.display.DisplayDiagram svg/figuras.svg
+java -cp build/classes/java/main:build/resources/main mx.unison.svg.display.DisplayDiagram svg/test_shapes.svg
 ```
 
-**Entrada:** exactamente una ruta a un SVG. **Salida:** una ventana no redimensionable con el dibujo de los elementos `<line>` que se hayan procesado. El cierre de la ventana termina la aplicación.
+**Entrada:** exactamente una ruta a un SVG. **Salida:** una ventana no redimensionable con las figuras del documento, en su orden de aparición y sobre fondo blanco. El cierre de la ventana termina la aplicación.
 
-El programa no dibuja `<circle>`, `<rect>`, `<polyline>` ni otros elementos aunque estén presentes en el archivo. Las dimensiones preferidas del componente se obtienen de los atributos `width` y `height` de la raíz `<svg>` cuando son enteros válidos.
+El archivo `svg/test_shapes.svg` reúne los elementos admitidos y varios casos con datos incorrectos para comprobar la integración. El tamaño de la ventana se obtiene de `width` y `height` de la raíz `<svg>`; si faltan o no son válidos se usan las medidas de `viewBox` y, en último caso, 300×150.
 
 ### 4. Demostración básica — `Main`
 
@@ -157,21 +172,29 @@ java -cp build/classes/java/main mx.unison.Main
 **Responsabilidad:** receptor de eventos SAX que describe elementos SVG en consola; extiende `DefaultHandler`.
 
 - `startElement(...)`: reconoce `svg` (`width`, `height`), `g` (`opacity`), `circle` (`cx`, `cy`, `r`), `rect` (`x`, `y`, `width`, `height`), `ellipse` (`cx`, `cy`, `rx`, `ry`) y `text` (`x`, `y`).
-- `characters(...)`: imprime fragmentos no vacíos del contenido de texto cuando se encuentra dentro de `<text>`.
-- `endElement(...)`: desactiva el indicador de texto al cerrar `</text>`.
-- `startDocument()` y `endDocument()`: invocan el comportamiento heredado.
+- `characters(...)`: acumula el contenido de texto cuando se encuentra dentro de `<text>`, porque SAX puede dividirlo en varios fragmentos.
+- `endElement(...)`: imprime el texto acumulado al cerrar `</text>`.
 
-No almacena un modelo del documento. Los eventos `characters()` pueden dividir un mismo texto en varios fragmentos.
+No almacena un modelo del documento.
 
 #### `Geometric.java`
 
 **Responsabilidad:** programa de consola y manejador SAX para calcular medidas geométricas; extiende `DefaultHandler`.
 
 - `main(String[] args)`: configura SAX con reconocimiento de espacios de nombres y validación habilitada; procesa el primer archivo indicado.
-- `startElement(...)`: lee atributos numéricos de `line`, `circle` y `rect`, crea objetos `Line`, `Circle` o `Rect` e imprime sus medidas.
-- `endElement(...)`: delega al método heredado.
+- `startElement(...)`: pide a `ShapeFactory` la figura del elemento e imprime sus medidas según su tipo. También inicia la lectura de `text`.
+- `characters(...)`: acumula el contenido de `<text>`.
+- `endElement(...)`: imprime los datos de `<text>`.
 
-Los atributos faltantes o no numéricos pueden provocar excepciones sin tratamiento específico. El cálculo de pendiente de líneas verticales lanza `ArithmeticException` desde `Line.m()`.
+Los atributos faltantes o no numéricos toman su valor predeterminado, y una línea vertical se reporta con pendiente indefinida.
+
+#### `ShapeFactory.java`
+
+**Responsabilidad:** interpretar los atributos de un elemento SVG y crear su figura. Es el único lugar donde se leen; un atributo ausente o incorrecto se sustituye por su valor predeterminado.
+
+- `create(String tagName, Attributes atts)`: crea la figura con su estilo, o devuelve `null` si el elemento no es una figura admitida.
+- `parseNumber(String value, double defaultValue)`: lee un atributo numérico.
+- El atributo `points` admite comas, espacios o ambos. Ante un dato incorrecto se conservan los vértices leídos hasta ese punto.
 
 ### Paquete `mx.unison.svg.display`
 
@@ -179,72 +202,163 @@ Los atributos faltantes o no numéricos pueden provocar excepciones sin tratamie
 
 **Responsabilidad:** punto de entrada de la interfaz gráfica.
 
-- `main(String[] args)`: exige una ruta, crea un `JFrame`, añade `SVGDiagram`, desactiva el redimensionamiento y ajusta el tamaño mediante `pack()`.
-- El marco se hace visible antes de añadir el componente y de llamar a `pack()`.
-- No inicia explícitamente la interfaz desde el *Event Dispatch Thread* (EDT).
+- `main(String[] args)`: exige una ruta y, dentro del *Event Dispatch Thread* (EDT), crea un `JFrame`, añade `SVGDiagram`, desactiva el redimensionamiento, ajusta el tamaño mediante `pack()` y muestra la ventana.
 
 #### `SVGDiagram.java`
 
-**Responsabilidad:** componente Swing encargado de cargar datos SVG y pintar las líneas reconocidas; extiende `JComponent`.
+**Responsabilidad:** componente Swing encargado de cargar un documento SVG y pintar sus figuras; extiende `JComponent`.
 
-- `SVGDiagram(File file)`: crea un analizador SAX; hace una primera pasada para leer `width` y `height` de `<svg>` y una segunda con `TagsHandler` para recuperar líneas.
-- `getPreferredSize()`: devuelve las dimensiones extraídas del documento.
-- `paintComponent(Graphics g)`: recorre las figuras recopiladas y dibuja las de tipo `line` con `Graphics2D.drawLine(...)`.
-- `parseColor(String colorStr)`: reconoce un conjunto limitado de nombres de color (`black`, `white`, `red`, `green`, `blue`, `yellow`, `cyan`, `magenta`, `gray`). También se intenta usar `Color.decode(...)` para colores como `#000`.
-
-El componente mantiene `strokeColor`, `fillColor` y `currentStroke`; `fillColor` está inicializado pero no se usa para dibujar. Aunque el pintado busca la propiedad `stroke-width`, el manejador actual no la almacena, por lo que el ancho indicado en el SVG no se aplica mediante este flujo.
+- `SVGDiagram(File file)`: crea un analizador SAX y obtiene de `TagsHandler` las dimensiones y las figuras del documento. Si el archivo tiene errores conserva lo leído hasta ese punto.
+- `getPreferredSize()`: devuelve las dimensiones del documento.
+- `paintComponent(Graphics g)`: pinta el fondo blanco y llama a `draw()` en cada figura, sin conocer su tipo concreto. Un error en una figura se registra en el log y no impide dibujar las siguientes.
 
 #### `TagsHandler.java`
 
-**Responsabilidad:** transformar eventos SAX de líneas SVG en una lista de propiedades.
+**Responsabilidad:** transformar los eventos SAX en las dimensiones del documento y una lista de objetos `SVGShape`.
 
-- `TagsHandler()`: inicializa `ArrayList<Properties>`.
-- `startElement(...)`: únicamente cuando encuentra `<line>`, almacena `type`, `x1`, `y1`, `x2`, `y2` y `stroke`.
-- `getShapes()`: devuelve la lista de figuras recopiladas.
-- `endElement(...)`: pone `currentShape` en `null`.
-
-No almacena `stroke-width`, grupos, transformaciones, círculos, rectángulos ni polilíneas. Otros métodos SAX sobrescritos no añaden comportamiento.
+- `startElement(...)`: lee las dimensiones de `<svg>` y pide a `ShapeFactory` la figura de cada elemento. Los elementos anidados dentro de una figura no se tratan como figuras.
+- `characters(...)`: acumula el contenido de `<text>`, que SAX puede entregar en varios fragmentos.
+- `endElement(...)`: guarda el texto acumulado y agrega la figura a la lista; si no es válida, la descarta y lo registra en el log.
+- `getShapes()`, `getWidth()` y `getHeight()`: devuelven las figuras válidas en el orden del documento y sus dimensiones.
 
 ### Paquete `mx.unison.svg.util`
 
-#### `Circle.java`
+#### `SVGShape.java`
 
-Modelo de círculo basado en su radio (`radio`, tipo `double`).
+Clase abstracta común a todas las figuras. Contiene su `SVGStyle` y define `draw(Graphics2D)`, que pinta la geometría devuelta por `toAwtShape()`. Cada subclase implementa `toAwtShape()` y puede redefinir `isValid()` para indicar si tiene datos suficientes para dibujarse.
 
-- `Circle(double radio)`: constructor.
-- `area()`: calcula `π × radio²`.
-- `perimeter()`: calcula `2 × π × radio`.
-- `getRadio()` / `setRadio(double)`: acceso y modificación del radio.
+#### `SVGStyle.java`
 
-No valida radios negativos.
+Registro (`record`) inmutable con `fill`, `stroke` y `stroke-width`. Un color `null` equivale a `none`. Por omisión usa los valores de SVG: relleno negro, sin contorno y grosor 1. `paint(Graphics2D, Shape)` pinta primero el relleno y después el contorno.
 
-#### `Rect.java`
+#### `ColorParser.java`
 
-Modelo de rectángulo definido por `width` y `height` (`double`).
+Convierte colores a `java.awt.Color`. Admite nombres web de `colors.properties`, `#rgb`, `#rrggbb`, `0xrrggbb`, `rgb(...)` y `rgba(...)`. `parse(...)` devuelve `null` si el valor no es válido.
 
-- `Rect(double width, double height)`: constructor.
-- `area()`: calcula `width × height`.
-- `perimeter()`: calcula `2 × width + 2 × height`.
-- Métodos `getWidth()`, `setWidth(double)`, `getHeight()` y `setHeight(double)`.
-
-No valida dimensiones negativas.
+El archivo de colores se busca en el classpath y después en el directorio de trabajo.
 
 #### `Line.java`
 
-Modelo de segmento definido por cuatro coordenadas (`double`).
+Segmento definido por cuatro coordenadas (`double`).
 
 - `Line()`: constructor sin argumentos.
-- `Line(double x1, double x2, double y1, double y2)`: constructor parametrizado **en este orden exacto**.
+- `Line(double x1, double y1, double x2, double y2)`: constructor parametrizado.
 - `lenght()`: calcula la distancia euclidiana entre los extremos; el nombre del método contiene una errata (`lenght`, no `length`).
 - `m()`: calcula `(y2 - y1) / (x2 - x1)` y lanza `ArithmeticException` cuando `x2 == x1`.
-- Métodos de acceso: `getX1()`, `setX1(double)`, `getY1()`, `setY1(double)`, `getY2()` y `setY2(double)`.
+- Métodos de acceso para `x1`, `y1`, `x2` e `y2`.
 
-No dispone de `getX2()` ni `setX2(double)`.
+#### `Polyline.java`
+
+Secuencia de segmentos conectados.
+
+- `Polyline(List<Point2D.Double> pointList)`: constructor.
+- `length()`: suma la longitud de los segmentos.
+- `getPoints()`: devuelve los vértices.
+
+Necesita al menos dos vértices. La figura queda abierta: el relleno cierra el contorno de forma implícita, pero no se traza el segmento de cierre.
+
+#### `Rect.java`
+
+Rectángulo definido por `x`, `y`, `width`, `height`, `rx` y `ry` (`double`).
+
+- `Rect(double width, double height)` y `Rect(double x, double y, double width, double height, double rx, double ry)`: constructores.
+- `area()`: calcula `width × height`.
+- `perimeter()`: calcula `2 × width + 2 × height`.
+- Métodos de acceso para `width` y `height`.
+
+Necesita ancho y alto positivos. Si solo se indica un radio, se usa en ambos ejes, y los radios se limitan a la mitad del lado.
+
+#### `Circle.java`
+
+Círculo definido por `cx`, `cy` y `radio` (`double`).
+
+- `Circle(double radio)` y `Circle(double cx, double cy, double radio)`: constructores.
+- `area()`: calcula `π × radio²`.
+- `perimeter()`: calcula `2 × π × radio`.
+- Métodos de acceso para `radio`.
+
+Necesita un radio positivo.
+
+#### `Ellipse.java`
+
+Elipse definida por `cx`, `cy`, `rx` y `ry` (`double`).
+
+- `Ellipse(double rx, double ry)` y `Ellipse(double cx, double cy, double rx, double ry)`: constructores.
+- `area()`: calcula `π × rx × ry`.
+- `perimeter()`: usa la aproximación de Ramanujan.
+- Métodos de acceso para `rx` y `ry`.
+
+Necesita ambos radios positivos.
+
+#### `Text.java`
+
+Elemento `<text>` definido por la posición de su línea base, `font-family`, `font-size` y su contenido.
+
+- `normalize(String raw)`: reduce los espacios en blanco como SVG por omisión.
+- `toFont()`: construye la fuente de Java 2D; si `font-family` es una lista usa la primera familia.
+- Métodos de consulta para sus atributos y de modificación para la fuente y el contenido.
+
+Se dibuja a partir del contorno de sus glifos, de modo que admite `fill` y `stroke` como cualquier otra figura. Un texto vacío no se dibuja.
 
 ### Clase `mx.unison.Main`
 
 - `main(String[] args)`: imprime un mensaje de bienvenida y ejecuta un bucle de cinco iteraciones.
 - Es independiente de los paquetes `svg.data`, `svg.display` y `svg.util`.
+
+## Diagrama de clases
+
+```mermaid
+classDiagram
+    class SVGShape {
+        <<abstract>>
+        -SVGStyle style
+        +draw(Graphics2D g2d)
+        +isValid() boolean
+        #toAwtShape()* Shape
+    }
+    class SVGStyle {
+        -Color fill
+        -Color stroke
+        -float strokeWidth
+        +paint(Graphics2D g2d, Shape shape)
+    }
+    class ShapeFactory {
+        +create(String tagName, Attributes atts)$ SVGShape
+        +parseNumber(String value, double defaultValue)$ double
+    }
+    class ColorParser {
+        +parse(String value)$ Color
+    }
+    class TagsHandler {
+        -ArrayList~SVGShape~ shapes
+        -int width
+        -int height
+        +getShapes() ArrayList~SVGShape~
+        +getWidth() int
+        +getHeight() int
+    }
+    class SVGDiagram {
+        -ArrayList~SVGShape~ shapes
+        #paintComponent(Graphics g)
+    }
+
+    SVGShape <|-- Line
+    SVGShape <|-- Polyline
+    SVGShape <|-- Rect
+    SVGShape <|-- Circle
+    SVGShape <|-- Ellipse
+    SVGShape <|-- Text
+    SVGShape o-- SVGStyle
+    DefaultHandler <|-- TagsHandler
+    JComponent <|-- SVGDiagram
+    DisplayDiagram ..> SVGDiagram
+    SVGDiagram ..> TagsHandler
+    SVGDiagram o-- SVGShape
+    TagsHandler ..> ShapeFactory
+    Geometric ..> ShapeFactory
+    ShapeFactory ..> SVGShape
+    ShapeFactory ..> ColorParser
+```
 
 ## Flujo de procesamiento
 
@@ -253,10 +367,18 @@ Archivo SVG (XML)
        |
        +--> DescribeSVG --> SAXParser --> SVGDocumentHandler --> Descripción en consola
        |
-       +--> Geometric (DefaultHandler) --> Line / Circle / Rect --> Cálculos en consola
+       +--> Geometric (DefaultHandler) --> ShapeFactory --> Cálculos en consola
        |
        +--> DisplayDiagram --> SVGDiagram
-                                 |--> SAXParser (dimensiones del SVG)
-                                 |--> TagsHandler (recopila líneas)
-                                 `--> paintComponent / Graphics2D --> Ventana Swing
+                                 |--> SAXParser --> TagsHandler --> ShapeFactory --> dimensiones y lista de SVGShape
+                                 `--> paintComponent --> SVGShape.draw(Graphics2D) --> Ventana Swing
 ```
+
+## Limitaciones y observaciones técnicas
+
+- No se interpretan CSS ni el atributo `style`, por lo que `svg/rectangulo.svg` se dibuja con el estilo predeterminado.
+- No se aplican transformaciones, `viewBox` (solo sirve como respaldo para el tamaño de la ventana), `opacity` ni los atributos heredados de `<g>`. Por eso `svg/simple.svg` y `svg/ejemplo.svg` difieren del navegador.
+- Solo se admiten valores numéricos simples: `font-size="20px"` no es válido y usa el valor predeterminado.
+- De `font-family` se usa la primera familia de la lista. Si no está instalada, Java aplica su fuente predeterminada.
+- `<tspan>` no se posiciona ni se estiliza por separado: su contenido se une al texto de `<text>`.
+- El suavizado de Java 2D y del navegador no es idéntico, de modo que los bordes y el texto pueden variar unos píxeles.
