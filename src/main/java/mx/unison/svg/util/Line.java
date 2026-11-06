@@ -1,6 +1,10 @@
 package mx.unison.svg.util;
 
-public class Line {
+import java.awt.*;
+import java.awt.geom.Line2D;
+import java.awt.geom.Point2D;
+
+public class Line extends SVGShape {
     private double x1;
     private double x2;
 
@@ -19,18 +23,19 @@ public class Line {
     }
 
     public double lenght() {
-        return Math.sqrt( Math.pow( x2-x1,2.0) +  Math.pow( y2-y1,2.0) );
+        return Point2D.distance(x1, y1, x2, y2);
     }
 
     public double m() {
-        double pendiente = 0.0;
-
         if( x2 - x1 == 0.0 ) {
             throw new ArithmeticException("Division entre cero");
-        }  else {
-            pendiente = (y2 - y1) / ( x2 - x1 );
         }
-        return pendiente;
+        return (y2 - y1) / ( x2 - x1 );
+    }
+
+    @Override
+    protected Shape toAwtShape() {
+        return new Line2D.Double(x1, y1, x2, y2);
     }
 
     public double getX1() {
@@ -39,6 +44,20 @@ public class Line {
 
     public void setX1(double x1) {
         this.x1 = x1;
+    }
+
+    /**
+     * @return coordenada x del extremo final
+     */
+    public double getX2() {
+        return x2;
+    }
+
+    /**
+     * @param x2 nueva coordenada x del extremo final
+     */
+    public void setX2(double x2) {
+        this.x2 = x2;
     }
 
     public double getY1() {
