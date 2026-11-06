@@ -6,7 +6,7 @@ import java.io.File;
 import java.util.logging.Logger;
 
 public class DescribeSVG {
-    public static Logger logger = Logger.getLogger(DescribeSVG.class.getName());
+    private static final Logger logger = Logger.getLogger(DescribeSVG.class.getName());
 
     public static void main(String[] args) {
 
@@ -21,7 +21,7 @@ public class DescribeSVG {
         factory.setValidating(false);
 
         File svgFilePath = new File(args[0]);
-        System.out.println("Describing SVG file: " + svgFilePath.toString());
+        System.out.println("Describing SVG file: " + svgFilePath);
         SAXParser parser = null;
         try {
             // Crear un parser SAX

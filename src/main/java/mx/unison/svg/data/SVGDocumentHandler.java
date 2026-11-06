@@ -1,96 +1,60 @@
 package mx.unison.svg.data;
 
+import mx.unison.svg.util.Text;
 import org.xml.sax.Attributes;
 import org.xml.sax.SAXException;
 import org.xml.sax.helpers.DefaultHandler;
 
 public class SVGDocumentHandler extends DefaultHandler {
 
-    private boolean inTextElement = false;
-
-    public SVGDocumentHandler() {
-        super();
-    }
-
-    @Override
-    public void startDocument() throws SAXException {
-        super.startDocument();
-    }
+    // Acumula el contenido de un <text>; es null fuera de <text>.
+    private StringBuilder textBuffer = null;
 
     @Override
     public void startElement(String uri, String localName, String qName, Attributes attributes) throws SAXException {
-
-        String tagName = null;
-
-        if(localName == null || localName.isEmpty()) {
-            tagName = qName;
-        } else {
-            tagName = localName;
-        }
-
-        if(tagName.equals("svg")) {
-            String width = attributes.getValue("width");
-            String height = attributes.getValue("height");
-            System.out.printf("SVG Document\n\tWidth: %s , Height: %s\n", width, height);
-        }
-        if(tagName.equals("g")) {
-            String opacity = attributes.getValue("opacity");
-            System.out.printf("Group\n\tOpacity: %s\n", opacity);
-        }
-        if(tagName.equals("circle")) {
-            String cx = attributes.getValue("cx");
-            String cy = attributes.getValue("cy");
-            String r = attributes.getValue("r");
-            System.out.printf("Circle\n\tCenter: (%s, %s), Radius: %s\n", cx, cy, r);
-        }
-        if(tagName.equals("rect")) {
-            String x = attributes.getValue("x");
-            String y = attributes.getValue("y");
-            String width = attributes.getValue("width");
-            String height = attributes.getValue("height");
-            System.out.printf("Rectangle\n\tPosition: (%s, %s), Width: %s, Height: %s\n", x, y, width, height);
-        }
-        if(tagName.equals("ellipse")) {
-            String cx = attributes.getValue("cx");
-            String cy = attributes.getValue("cy");
-            String rx = attributes.getValue("rx");
-            String ry = attributes.getValue("ry");
-            System.out.printf("Ellipse\n\tCenter: (%s, %s), RadiusX: %s, RadiusY: %s\n", cx, cy, rx, ry);
-        }
-        if(tagName.equals("text")) {
-            inTextElement = true;
-            String x = attributes.getValue("x");
-            String y = attributes.getValue("y");
-            System.out.printf("Text\n\tPosition: (%s, %s)\n", x, y);
-        }
-    }
-
-    @Override
-    public void characters(char[] ch, int start, int length) throws SAXException {
-        if(inTextElement) {
-            String textContent = new String(ch, start, length).trim();
-            if(!textContent.isEmpty()) {
-                System.out.printf("\tText Content: %s\n", textContent);
+        switch (localName) {
+            case "svg" -> System.out.printf("SVG Document\n\tWidth: %s , Height: %s\n",
+                    attributes.getValue("width"),
+                    attributes.getValue("height"));
+            case "g" -> System.out.printf("Group\n\tOpacity: %s\n", attributes.getValue("opacity"));
+            case "circle" -> System.out.printf("Circle\n\tCenter: (%s, %s), Radius: %s\n",
+                    attributes.getValue("cx"),
+                    attributes.getValue("cy"),
+                    attributes.getValue("r"));
+            case "rect" -> System.out.printf("Rectangle\n\tPosition: (%s, %s), Width: %s, Height: %s\n",
+                    attributes.getValue("x"),
+                    attributes.getValue("y"),
+                    attributes.getValue("width"),
+                    attributes.getValue("height"));
+            case "ellipse" -> System.out.printf("Ellipse\n\tCenter: (%s, %s), RadiusX: %s, RadiusY: %s\n",
+                    attributes.getValue("cx"),
+                    attributes.getValue("cy"),
+                    attributes.getValue("rx"),
+                    attributes.getValue("ry"));
+            case "text" -> {
+                textBuffer = new StringBuilder();
+                System.out.printf("Text\n\tPosition: (%s, %s)\n",
+                        attributes.getValue("x"),
+                        attributes.getValue("y"));
             }
         }
     }
 
     @Override
-    public void endElement(String uri, String localName, String qName) throws SAXException {
-        String tagName = null;
-
-        if(localName == null || localName.isEmpty()) {
-            tagName = qName;
-        } else {
-            tagName = localName;
-        }
-          if(tagName.equals("text")) {
-            inTextElement = false;
+    public void characters(char[] ch, int start, int length) throws SAXException {
+        // SAX puede dividir el contenido en varios fragmentos: se acumulan
+        // y se imprimen juntos al cerrar </text>.
+        if(textBuffer != null) {
+            textBuffer.append(ch, start, length);
         }
     }
 
     @Override
-    public void endDocument() throws SAXException {
-        super.endDocument();
+    public void endElement(String uri, String localName, String qName) throws SAXException {
+        if(localName.equals("text") && textBuffer != null) {
+            String textContent = Text.normalize(textBuffer.toString());
+            System.out.printf("\tText Content: %s\n", textContent);
+            textBuffer = null;
+        }
     }
 }

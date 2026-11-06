@@ -13,58 +13,75 @@ import java.util.logging.Logger;
 
 import mx.unison.svg.util.Line;
 import mx.unison.svg.util.Circle;
+import mx.unison.svg.util.Ellipse;
+import mx.unison.svg.util.Polyline;
 import mx.unison.svg.util.Rect;
+import mx.unison.svg.util.Text;
 
 
 public class Geometric extends DefaultHandler {
-    private static final String CLASS_NAME = Geometric.class.getSimpleName();
+    private final static Logger LOG = Logger.getLogger(Geometric.class.getSimpleName());
 
-    private final static Logger LOG = Logger.getLogger(CLASS_NAME);
-
-   public Geometric() {
-        super();
-    }
+    // Elemento <text> en lectura (null fuera de <text>) y su contenido acumulado.
+    private Text currentText = null;
+    private final StringBuilder textBuffer = new StringBuilder();
 
     @Override
     public void startElement(String uri, String localName, String qName, Attributes attributes) throws SAXException {
-
-        if( localName.equals("line")) {
-            double x1 = Double.parseDouble( attributes.getValue("x1") );
-            double y1 = Double.parseDouble( attributes.getValue("y1") );
-            double x2 = Double.parseDouble( attributes.getValue("x2") );
-            double y2 = Double.parseDouble( attributes.getValue("y2") );
-            Line line = new Line(x1,y1,x2,y2);
-            System.out.printf("Linea\n\tLongitud: %6.2f , pendiente: %6.2f\n",
-                    line.lenght(),
-                    line.m());
-        }
-
-        if( localName.equals("circle") ) {
-            double radio = Double.parseDouble( attributes.getValue("r") );
-            Circle circle = new Circle(radio);
-            System.out.printf("Circulo\n\tArea: %6.2f , perimetro: %6.2f\n",
+        switch (ShapeFactory.create(localName, attributes)) {
+            case Line line -> {
+                // Una linea vertical no tiene pendiente definida
+                String pendiente = line.getX1() == line.getX2()
+                        ? "indefinida" : String.format("%6.2f", line.m());
+                System.out.printf("Linea\n\tLongitud: %6.2f , pendiente: %s\n", line.lenght(), pendiente);
+            }
+            case Circle circle -> System.out.printf("Circulo\n\tArea: %6.2f , perimetro: %6.2f\n",
                     circle.area(),
                     circle.perimeter());
-        }
-
-        if( localName.equals("rect")) {
-            double width = Double.parseDouble(attributes.getValue("width") );
-            double height = Double.parseDouble(attributes.getValue("height"));
-            Rect rect = new Rect( width, height) ;
-            System.out.printf("Rectangulo\n\tArea: %6.2f , perimetro: %6.2f\n",
+            case Rect rect -> System.out.printf("Rectangulo\n\tArea: %6.2f , perimetro: %6.2f\n",
                     rect.area(),
                     rect.perimeter());
+            case Ellipse ellipse -> System.out.printf("Elipse\n\tArea: %6.2f , perimetro: %6.2f\n",
+                    ellipse.area(),
+                    ellipse.perimeter());
+            case Polyline polyline -> System.out.printf("Polilinea\n\tVertices: %d , longitud: %6.2f\n",
+                    polyline.getPoints().size(),
+                    polyline.length());
+            case Text text -> {
+                currentText = text;
+                textBuffer.setLength(0);
+            }
+            case null, default -> {
+            }
+        }
+    }
+
+    @Override
+    public void characters(char[] ch, int start, int length) throws SAXException {
+        // El contenido del <text> puede llegar en varios fragmentos.
+        if (currentText != null) {
+            textBuffer.append(ch, start, length);
         }
     }
 
     @Override
     public void endElement(String uri, String localName, String qName) throws SAXException {
-        super.endElement(uri, localName, qName);
+        if (localName.equals("text") && currentText != null) {
+            currentText.setTexto(textBuffer.toString());
+            System.out.printf("Texto\n\tPosicion: (%6.2f, %6.2f), fuente: %s %6.2f\n\tContenido: \"%s\" (%d caracteres)\n",
+                    currentText.getX(),
+                    currentText.getY(),
+                    currentText.getFontFamily(),
+                    currentText.getFontSize(),
+                    currentText.getTexto(),
+                    currentText.getTexto().length());
+            currentText = null;
+        }
     }
 
-    public static void main(String args[]) {
-       if (args.length == 0) {
-            LOG.severe("Falta el nombre del documento SVG. Uso:" + "\njava Geometric <filename>");
+    public static void main(String[] args) {
+        if (args.length == 0) {
+            LOG.severe("Falta el nombre del documento SVG. Uso:\njava Geometric <filename>");
             System.exit(1);
         }
 
@@ -75,9 +92,7 @@ public class Geometric extends DefaultHandler {
 
         try {
             saxParser = factory.newSAXParser();
-        } catch (ParserConfigurationException e) {
-            LOG.severe( e.getMessage());
-        } catch (SAXException e) {
+        } catch (ParserConfigurationException | SAXException e) {
             LOG.severe( e.getMessage());
         }
 
