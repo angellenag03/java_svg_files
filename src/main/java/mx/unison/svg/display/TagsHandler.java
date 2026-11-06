@@ -1,109 +1,139 @@
 package mx.unison.svg.display;
 
+import mx.unison.svg.data.ShapeFactory;
+import mx.unison.svg.util.SVGShape;
+import mx.unison.svg.util.Text;
 import org.xml.sax.Attributes;
-import org.xml.sax.Locator;
 import org.xml.sax.SAXException;
 import org.xml.sax.SAXParseException;
 import org.xml.sax.helpers.DefaultHandler;
 
 import java.util.ArrayList;
-import java.util.Properties;
-import java.util.Set;
-import java.util.logging.Level;
 import java.util.logging.Logger;
 
 public class TagsHandler  extends DefaultHandler {
-    public static final Logger LOG = Logger.getLogger( TagsHandler.class.getName() );
+    private static final Logger LOG = Logger.getLogger( TagsHandler.class.getName() );
 
-    private ArrayList<Properties> shapes;
-    private Properties currentShape = null;
-    
-    private static final Set<String> SUPPORTED_SHAPES = Set.of(
-        "line", "ellipse", "circle", "polyline", "rect", "text"
-    );
-    
-    public TagsHandler() {
-        super();
-        shapes = new ArrayList<>();
-    }
+    // Tamaño predeterminado de un documento SVG sin dimensiones
+    private static final int DEFAULT_WIDTH = 300;
+    private static final int DEFAULT_HEIGHT = 150;
 
-    public ArrayList<Properties> getShapes() {
+    private final ArrayList<SVGShape> shapes = new ArrayList<>();
+    private int width = DEFAULT_WIDTH;
+    private int height = DEFAULT_HEIGHT;
+
+    // Figura que se está leyendo y nombre de su elemento.
+    private SVGShape currentShape = null;
+    private String currentTag = null;
+
+    // Contenido del <text> que se está leyendo.
+    private final StringBuilder textBuffer = new StringBuilder();
+
+    /**
+     * @return figuras válidas del documento, en el orden en que aparecen
+     */
+    public ArrayList<SVGShape> getShapes() {
         return shapes;
     }
 
-    @Override
-    public void setDocumentLocator(Locator locator) {
-        super.setDocumentLocator(locator);
+    /**
+     * @return ancho del documento
+     */
+    public int getWidth() {
+        return width;
     }
 
-    @Override
-    public void startDocument() throws SAXException {
-        super.startDocument();
-    }
-
-    @Override
-    public void endDocument() throws SAXException {
-        super.endDocument();
-    }
-
-    @Override
-    public void startPrefixMapping(String prefix, String uri) throws SAXException {
-            super.startPrefixMapping(prefix, uri);
-    }
-
-    @Override
-    public void endPrefixMapping(String prefix) throws SAXException {
-        super.endPrefixMapping(prefix);
+    /**
+     * @return alto del documento
+     */
+    public int getHeight() {
+        return height;
     }
 
     @Override
     public void startElement(String uri, String localName, String qName, Attributes atts) throws SAXException {
-        String tagName = null;
-
-        if(localName == null || localName.isEmpty()) {
-            tagName = qName.toLowerCase();
-        } else {
-            tagName = localName.toLowerCase();
+        if (localName.equals("svg")) {
+            readDimensions(atts);
         }
-        // valores admitidos: line, ellipse, circle, polyline, rect
-        // se añade un set para simplificar más el código
-        if (SUPPORTED_SHAPES.contains(tagName)) {
-            addShape(tagName, atts);
+        // Un elemento dentro de una figura (p. ej. <tspan>) no es otra figura.
+        if (currentShape != null) {
+            return;
+        }
+        String tagName = localName.toLowerCase();
+
+        currentShape = ShapeFactory.create(tagName, atts);
+        if (currentShape != null) {
+            LOG.info("Starting element " + tagName);
+            currentTag = tagName;
         }
     }
-    
-    // método de apoyo para startElement, en vez de tener que hacer ifs uno por uno
-    private void addShape(String tagName, Attributes atts) {
-        LOG.info("Starting element " + tagName);
-            currentShape = new Properties();
-            currentShape.put("type", tagName);
 
-            copyAttributes(atts, currentShape);
-            shapes.add(currentShape);
-    }
+    // Toma width y height de <svg>; si faltan o no son válidos usa las medidas de
+    // viewBox y, en último caso, el tamaño predeterminado.
+    private void readDimensions(Attributes atts) {
+        double viewW = DEFAULT_WIDTH;
+        double viewH = DEFAULT_HEIGHT;
 
-    private void copyAttributes(Attributes atts, Properties myShape) {
-        if(atts.getLength() != 0) {
-            for(int i = 0; i < atts.getLength(); i++) {
-                String name = atts.getLocalName(i);
-                String value = atts.getValue(i);
-                myShape.put(name, value);
+        String viewBox = atts.getValue("viewBox");
+        if (viewBox != null) {
+            String[] values = viewBox.trim().split("[\\s,]+");
+            if (values.length == 4) {
+                viewW = positiveNumber(values[2], viewW);
+                viewH = positiveNumber(values[3], viewH);
             }
         }
+        width = (int) Math.ceil(positiveNumber(atts.getValue("width"), viewW));
+        height = (int) Math.ceil(positiveNumber(atts.getValue("height"), viewH));
+        LOG.info("SVG Document\n\tWidth: " + width + " , Height: " + height);
     }
 
+    private double positiveNumber(String value, double defaultValue) {
+        double number = ShapeFactory.parseNumber(value, defaultValue);
+        return number > 0 ? number : defaultValue;
+    }
+
+    /**
+     * Termina la figura en lectura. Se agrega a la lista al cerrarse para conocer
+     * todo su contenido; las figuras no se anidan, así que el orden del documento
+     * se conserva. Una figura no válida se descarta sin afectar a las demás.
+     */
     @Override
     public void endElement(String uri, String localName, String qName) throws SAXException {
+        if (currentShape == null || !localName.toLowerCase().equals(currentTag)) {
+            return;
+        }
+
+        // Al cerrar </text> se guarda el contenido acumulado en la figura.
+        if (currentShape instanceof Text text) {
+            text.setTexto(textBuffer.toString());
+            LOG.info("Text content: " + text.getTexto());
+            textBuffer.setLength(0);
+        }
+
+        if (currentShape.isValid()) {
+            shapes.add(currentShape);
+        } else {
+            LOG.warning("Ignoring invalid element: " + currentTag);
+        }
         currentShape = null;
+        currentTag = null;
     }
 
+    /**
+     * Recibe el texto que aparece entre etiquetas. SAX puede entregar el
+     * contenido de un elemento en varios fragmentos, por eso se acumula en
+     * {@code textBuffer} hasta que se cierra {@code </text>}. Los caracteres de
+     * elementos anidados (p. ej. {@code <tspan>}) también se incluyen.
+     */
     @Override
     public void characters(char[] ch, int start, int length) throws SAXException {
-
+        if (currentShape instanceof Text) {
+            textBuffer.append(ch, start, length);
+        }
     }
 
     @Override
     public void error(SAXParseException e) throws SAXException {
-        LOG.log(Level.SEVERE, "OOPS" + e.getMessage());
+        LOG.severe("OOPS" + e.getMessage());
     }
 }
